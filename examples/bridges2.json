@@ -1,0 +1,25 @@
+{
+  "notifications": true,
+  "clusters": [
+    {
+      "name": "bridges2",
+      "host": "bridges2.psc.edu",
+      "user": "YOUR_USERNAME",
+      "controlPath": "~/.ssh/slurmbar-%r@%h",
+      "controlPersist": "12h",
+      "refreshSeconds": 120,
+      "widgets": [
+        { "type": "jobs", "options": { "finishedHours": "24" } },
+        { "type": "allocation" },
+        { "type": "quota" },
+        { "type": "partition", "options": { "partitions": "RM-shared" } },
+        {
+          "type": "command",
+          "title": "Newest Slurm log",
+          "command": "f=$(ls -t ~/slurm-*.out 2>/dev/null | head -1); if [ -n \"$f\" ]; then echo \"${f##*/}\"; tail -n 3 \"$f\"; else echo 'no slurm-*.out in ~'; fi",
+          "refreshSeconds": 300
+        }
+      ]
+    }
+  ]
+}
