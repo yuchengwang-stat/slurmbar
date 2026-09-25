@@ -106,6 +106,12 @@ check("connect command", RemoteShell(cluster: starter.clusters[0]).connectComman
       "ssh -fN -o ControlMaster=yes -o ControlPath='~/.ssh/slurmbar-%r@%h' -o ControlPersist=12h me@bridges2.psc.edu",
       RemoteShell(cluster: starter.clusters[0]).connectCommand)
 
+check("with a control socket, ssh can't open a new connection",
+      RemoteShell(cluster: starter.clusters[0]).arguments.contains("ProxyCommand=/usr/bin/false"))
+check("refused login is told apart from a network problem",
+      ShellError.failed(status: 255, message: "ywang@x: Permission denied (publickey).").isLoginRefused
+      && !ShellError.failed(status: 255, message: "Connection closed by UNKNOWN port 65535").isLoginRefused)
+
 let example = URL(fileURLWithPath: "examples/bridges2.json")
 if FileManager.default.fileExists(atPath: example.path) {
     let widgets = (try? ConfigStore.load(example))?.clusters.first?.widgets?.map(\.type) ?? []

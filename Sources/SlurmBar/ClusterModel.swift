@@ -10,6 +10,9 @@ final class ClusterModel: Identifiable {
     var connected: Bool?
     var lastSuccess: Date?
     var refreshing = false
+    /// Set when a direct login (no control socket) was refused. Background polling then stops until
+    /// the user refreshes by hand, so SlurmBar never piles up failed logins.
+    var loginRefused = false
     @ObservationIgnored private var loops: [Task<Void, Never>] = []
     @ObservationIgnored private var busy: Set<ObjectIdentifier> = []
 
@@ -28,7 +31,7 @@ final class ClusterModel: Identifiable {
         for w in widgets where w.usesCluster {
             loops.append(Task { [weak self] in
                 while !Task.isCancelled {
-                    await self?.refresh(w)
+                    if self?.loginRefused == false { await self?.refresh(w) }
                     try? await Task.sleep(for: .seconds(w.interval))
                 }
             })
@@ -57,12 +60,14 @@ final class ClusterModel: Identifiable {
             lastSuccess = Date()
         } catch let e as ShellError where e.isConnectionProblem {
             connected = false  // the banner explains; no need to repeat it in every panel
+            if !canConnect, e.isLoginRefused { loginRefused = true }
         } catch {
             w.status.error = error.localizedDescription
         }
     }
 
     func refreshAll() async {
+        loginRefused = false
         refreshing = true
         defer { refreshing = false }
         await withTaskGroup(of: Void.self) { group in

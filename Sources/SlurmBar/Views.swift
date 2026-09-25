@@ -119,7 +119,7 @@ struct ConnectBanner: View {
             Label("Not connected", systemImage: "bolt.horizontal.circle").font(.system(size: 12, weight: .semibold))
             Text(cluster.canConnect
                  ? "SlurmBar joins an ssh connection you open yourself. Sign in once in Terminal and it picks the connection up."
-                 : "ssh couldn't log in without a password. Add a controlPath to the config, or set up key-based login.")
+                 : "ssh couldn't log in without a password, so SlurmBar stopped trying. Add a controlPath to the config or set up key-based login, then press refresh.")
                 .caption()
                 .fixedSize(horizontal: false, vertical: true)
             if cluster.canConnect {

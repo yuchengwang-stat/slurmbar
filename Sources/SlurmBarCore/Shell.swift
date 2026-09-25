@@ -24,6 +24,12 @@ public enum ShellError: Error, LocalizedError {
         case .timedOut: return true
         }
     }
+
+    /// The server turned the login down, as opposed to the network being away.
+    public var isLoginRefused: Bool {
+        if case .failed(255, let message) = self { return message.contains("Permission denied") }
+        return false
+    }
 }
 
 /// Runs commands with the system ssh. It never asks for a password: BatchMode makes ssh fail instead,
@@ -58,11 +64,13 @@ public struct RemoteShell: CommandRunner {
 
     var hasControlPath: Bool { !(controlPath ?? "").isEmpty }
 
-    var options: [String] {
+    public var arguments: [String] {
         var o = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=2"]
         if hasControlPath {
-            // use the connection the user opened; never start a new master from here
-            o += ["-o", "ControlPath=\(controlPath!)", "-o", "ControlMaster=no"]
+            // Only ever join the connection the user opened. If it's gone, ProxyCommand=false makes
+            // ssh fail at once instead of trying to log in, since a stream of failed logins can get
+            // an IP blocked.
+            o += ["-o", "ControlPath=\(controlPath!)", "-o", "ControlMaster=no", "-o", "ProxyCommand=/usr/bin/false"]
         } else {
             // a master that ssh backgrounds on its own would keep our pipes open
             o += ["-o", "ControlPersist=no"]
@@ -71,7 +79,7 @@ public struct RemoteShell: CommandRunner {
     }
 
     public func run(_ command: String) async throws -> String {
-        let r = try await Subprocess.run("/usr/bin/ssh", options + [destination, command], timeout: timeout)
+        let r = try await Subprocess.run("/usr/bin/ssh", arguments + [destination, command], timeout: timeout)
         guard r.status == 0 else {
             let msg = r.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
             throw ShellError.failed(status: r.status, message: msg.isEmpty ? "ssh exited with \(r.status)" : msg)

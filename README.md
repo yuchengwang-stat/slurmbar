@@ -44,7 +44,9 @@ ssh -fN -o ControlMaster=yes -o ControlPath='~/.ssh/slurmbar-%r@%h' -o ControlPe
 
 SlurmBar picks the connection up within a few seconds. Note that `ControlPersist` is an idle timeout: while SlurmBar keeps polling, the connection stays open until you close it (`ssh -O exit` with the same `ControlPath`), the network drops, or the Mac sleeps. The gear menu has an Open at login switch.
 
-If you log in with a key and no 2FA, leave `controlPath` out and SlurmBar connects directly.
+With a `controlPath`, SlurmBar can only join that connection. If it's gone, ssh fails at once instead of trying to log in, so a closed laptop lid or a dropped network never turns into a stream of failed logins on the cluster.
+
+If you log in with a key and no 2FA, leave `controlPath` out and SlurmBar connects directly. If such a login is ever refused, it stops trying until you press refresh.
 
 What it runs on the cluster: `squeue` and `sacct` every 2 minutes, `sinfo` and a count of waiting jobs every 10 minutes, `projects` and `my_quotas` every 30 minutes. These are the read-only queries you would type yourself. Nothing else runs unless you add a `command` panel.
 
