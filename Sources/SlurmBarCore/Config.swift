@@ -19,7 +19,7 @@ public struct ClusterConfig: Codable, Sendable, Identifiable {
     /// Used in the connect command SlurmBar suggests.
     public var controlPersist: String?
     public var sshOptions: [String]?
-    /// How often the jobs panel refreshes. Other panels have their own, slower defaults.
+    /// A fixed interval for the jobs panel. Left out, it adapts: 5 minutes with jobs in the queue, 15 without.
     public var refreshSeconds: Int?
     public var widgets: [WidgetSpec]?
 
@@ -94,8 +94,7 @@ public enum ConfigStore {
         let name = host.split(separator: ".").first.map(String.init) ?? "cluster"
         return AppConfig(notifications: true, clusters: [
             ClusterConfig(name: name, host: host, user: user, controlPath: "~/.ssh/slurmbar-%r@%h",
-                          controlPersist: "12h", refreshSeconds: 120,
-                          widgets: ClusterConfig.defaultWidgets(psc: host.hasSuffix("psc.edu"))),
+                          controlPersist: "12h", widgets: ClusterConfig.defaultWidgets(psc: host.hasSuffix("psc.edu"))),
         ])
     }
 }

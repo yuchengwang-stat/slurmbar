@@ -15,24 +15,28 @@ final class ClusterModel: Identifiable {
     var loginRefused = false
     @ObservationIgnored private var loops: [Task<Void, Never>] = []
     @ObservationIgnored private var busy: Set<ObjectIdentifier> = []
+    @ObservationIgnored private let activity: Activity
 
     nonisolated var id: String { config.name }
 
     init(config: ClusterConfig, runner: CommandRunner, services: Services) {
         self.config = config
         self.runner = runner
+        activity = services.activity
         widgets = (config.widgets ?? ClusterConfig.defaultWidgets(psc: config.host.hasSuffix("psc.edu")))
             .map { WidgetFactory.make($0, cluster: config, services: services) }
     }
 
-    /// Each panel refreshes on its own clock.
+    /// Panels with a background interval refresh on their own clock; the others wait for the panel
+    /// to open. Nothing runs while the screen is locked or asleep.
     func start() {
         stop()
-        for w in widgets where w.usesCluster {
+        for w in widgets where w.usesCluster && w.backgroundInterval != nil {
             loops.append(Task { [weak self] in
                 while !Task.isCancelled {
-                    if self?.loginRefused == false { await self?.refresh(w) }
-                    try? await Task.sleep(for: .seconds(w.interval))
+                    guard let self else { return }
+                    if !self.loginRefused, !self.activity.paused { await self.refresh(w) }
+                    try? await Task.sleep(for: .seconds(w.backgroundInterval ?? 3600))
                 }
             })
         }
@@ -66,20 +70,25 @@ final class ClusterModel: Identifiable {
         }
     }
 
-    func refreshAll() async {
+    /// The refresh button and a new connection refresh everything. Catching up after a lock or
+    /// sleep (`background`) leaves out the panels that only refresh while the panel is open.
+    func refreshAll(background: Bool = false) async {
+        if background, loginRefused { return }
         loginRefused = false
         refreshing = true
         defer { refreshing = false }
         await withTaskGroup(of: Void.self) { group in
-            for w in widgets where w.usesCluster {
+            for w in widgets where w.usesCluster && (!background || w.backgroundInterval != nil) {
                 group.addTask { await self.refresh(w) }
             }
         }
     }
 
-    func refreshJobs(ifOlderThan seconds: TimeInterval) {
-        for w in widgets where w is JobsWidget {
-            if let t = w.status.lastUpdated, Date().timeIntervalSince(t) < seconds { continue }
+    /// When the panel opens, refresh whatever is out of date.
+    func refreshStale() {
+        guard !loginRefused else { return }
+        for w in widgets where w.usesCluster {
+            if let t = w.status.lastUpdated, Date().timeIntervalSince(t) < Double(w.staleAfter) { continue }
             Task { await refresh(w) }
         }
     }

@@ -48,7 +48,17 @@ With a `controlPath`, SlurmBar can only join that connection. If it's gone, ssh 
 
 If you log in with a key and no 2FA, leave `controlPath` out and SlurmBar connects directly. If such a login is ever refused, it stops trying until you press refresh.
 
-What it runs on the cluster: `squeue` and `sacct` every 2 minutes, `sinfo` and a count of waiting jobs every 10 minutes, `projects` and `my_quotas` every 30 minutes. These are the read-only queries you would type yourself. Nothing else runs unless you add a `command` panel.
+### How often it asks
+
+Slurm's own [squeue documentation](https://slurm.schedmd.com/squeue.html) asks programs to keep calls to the minimum necessary, since every call lands on the scheduler everyone shares. So SlurmBar asks as little as it can:
+
+- `squeue` for your jobs: every 5 minutes while you have jobs in the queue, every 15 minutes when you don't.
+- `sacct`: only when a job leaves the queue, to learn how it ended, or when you open the panel and the list is more than 2 minutes old.
+- `projects` and `my_quotas`: once an hour, which is enough to work out the allocation pace.
+- Partition load lists the whole partition queue, so it only runs while the panel is open, at most every 10 minutes.
+- Nothing runs while the screen is locked or asleep. Afterwards SlurmBar checks once, and jobs that ended in the meantime still get their notification.
+
+A day with jobs in the queue and the screen on for 10 hours comes to about 120 `squeue` calls, with `sacct` only as often as jobs end or you open the panel. Every panel takes a `refreshSeconds`, but never below a minute. To see exactly what SlurmBar runs, start it with `SLURMBAR_LOG` set to a file path and every command is logged there with a timestamp.
 
 ## Configuration
 
@@ -84,7 +94,7 @@ Cluster fields:
 | `controlPath` | Socket of the connection you open yourself. Leave it out if ssh logs in without a password. |
 | `controlPersist` | Used in the connect command SlurmBar suggests. Default `12h`. |
 | `sshOptions` | Extra ssh arguments, for example `["-p", "2222"]` |
-| `refreshSeconds` | How often the jobs panel refreshes. Default 120. |
+| `refreshSeconds` | A fixed interval for the jobs panel. Left out, it adapts as described above. |
 | `widgets` | The panels, top to bottom |
 
 List several clusters and each gets its own section.
@@ -99,7 +109,7 @@ Panels:
 | `partition` | Load and queue length | `partitions`, comma separated |
 | `command` | Whatever the command prints | `lines` (default 6) |
 
-Every panel also takes `title`, `refreshSeconds` and `menuBar` (`true` puts its short summary in the menu bar; for `allocation` that is the share of SUs left). `allocation`, `quota` and `command` take a `command` too, so a panel can read another tool that prints the same format.
+Every panel also takes `title`, `refreshSeconds` and `menuBar` (`true` puts its short summary in the menu bar; for `allocation` that is the share of SUs left). A `command` panel refreshes only while the panel is open, unless it has `refreshSeconds` or `menuBar`. `allocation`, `quota` and `command` take a `command` too, so a panel can read another tool that prints the same format.
 
 ## Adding a panel
 

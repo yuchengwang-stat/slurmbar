@@ -40,26 +40,39 @@ check("times use the cluster's offset", abs((started ?? .distantPast).timeInterv
 let odd = JobsSnapshot.parse("-0400\n@@SQUEUE\n7|a|b|RUNNING|0:10|1:00:00|1|1|RM|None|N/A|N/A\n@@SACCT\n")
 check("a job name with | in it", odd.queue.first?.name == "a|b" && odd.queue.first?.state == "RUNNING")
 
-// the watcher that drives notifications
-var watcher = JobWatcher()
-check("first snapshot only primes", watcher.update(snap).isEmpty)
-var next = snap
-next.queue.removeAll { $0.name == "fit_model" || $0.id == "51234567_3" }
-next.recent.insert(SlurmJob(id: "51230001", name: "fit_model", state: "COMPLETED", elapsed: 50_000, limit: 57_600,
-                            partition: "RM-shared", end: now, exitCode: "0:0"), at: 0)
-next.recent.insert(SlurmJob(id: "51234567_3", name: "sim_grid", state: "FAILED", elapsed: 11_000, limit: 57_600,
-                            partition: "RM-shared", end: now, exitCode: "1:0"), at: 0)
-let batches = watcher.update(next)
-check("two jobs stopped", batches.count == 2, "\(batches.map(\.name))")
+// notifications: every finished job is reported once, from sacct
+var watcher = FinishWatcher()
+check("the first finished list only sets the baseline", watcher.update(snap.recent, now: now).isEmpty)
+var later = snap.recent
+later.insert(SlurmJob(id: "51230001", name: "fit_model", state: "COMPLETED", elapsed: 50_000, limit: 57_600,
+                      partition: "RM-shared", end: now, exitCode: "0:0"), at: 0)
+later.insert(SlurmJob(id: "51234567_3", name: "sim_grid", state: "FAILED", elapsed: 11_000, limit: 57_600,
+                      partition: "RM-shared", end: now, exitCode: "1:0"), at: 0)
+later.insert(SlurmJob(id: "51250000", name: "typo_job", state: "CANCELLED", elapsed: 0, partition: "RM-shared", end: now), at: 0)
+let batches = watcher.update(later, now: now)
+check("new finished jobs are reported", batches.map(\.name).sorted() == ["fit_model", "sim_grid"], "\(batches.map(\.name))")
+check("a job cancelled before it ran is not reported", !batches.contains { $0.name == "typo_job" })
 check("failure is flagged", batches.first { $0.name == "sim_grid" }?.problems == 1)
 let text = NotificationText.make(batches.first { $0.name == "sim_grid" }!)
 check("failure wording", text.title == "✗ sim_grid failed" && text.body.hasPrefix("exit 1:0"), "\(text)")
-var gone = next
-gone.queue.removeAll { $0.name == "preprocess" }
-let first = watcher.update(gone)
-let second = watcher.update(gone)
-let third = watcher.update(gone)
-check("waits for sacct before giving up", first.isEmpty && second.isEmpty && third.first?.jobs.first?.state == "ENDED")
+check("each job is reported once", watcher.update(later, now: now).isEmpty)
+
+// how often it asks
+check("5 minutes with jobs in the queue", JobsSchedule.interval(queueEmpty: false, fixed: nil) == 300)
+check("15 minutes with an empty queue", JobsSchedule.interval(queueEmpty: true, fixed: nil) == 900)
+check("a fixed interval never goes below a minute", JobsSchedule.interval(queueEmpty: false, fixed: 10) == 60)
+check("no sacct when nothing left the queue",
+      !JobsSchedule.wantsFinished(somethingLeft: false, stillWaiting: false, listAge: 600, panelOpen: false))
+check("sacct when a job left the queue",
+      JobsSchedule.wantsFinished(somethingLeft: true, stillWaiting: false, listAge: 10, panelOpen: false))
+check("the first look always fetches the finished list",
+      JobsSchedule.wantsFinished(somethingLeft: false, stillWaiting: false, listAge: .infinity, panelOpen: false))
+check("no sacct in the background just because the list is old",
+      !JobsSchedule.wantsFinished(somethingLeft: false, stillWaiting: false, listAge: 7200, panelOpen: false))
+check("sacct when the panel is open and the list is old",
+      JobsSchedule.wantsFinished(somethingLeft: false, stillWaiting: false, listAge: 300, panelOpen: true))
+check("squeue and sacct are separate calls",
+      !JobsSnapshot.queueCommand.contains("sacct") && !JobsSnapshot.finishedCommand(hours: 24).contains("squeue"))
 
 // PSC allocation
 do {

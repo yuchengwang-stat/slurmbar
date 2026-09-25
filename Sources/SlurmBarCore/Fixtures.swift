@@ -96,7 +96,7 @@ public enum Fixtures {
 
     public static var demoConfig: AppConfig {
         AppConfig(notifications: false, clusters: [
-            ClusterConfig(name: "bridges2", host: "bridges2.psc.edu", user: "demo", refreshSeconds: 120, widgets: [
+            ClusterConfig(name: "bridges2", host: "bridges2.psc.edu", user: "demo", widgets: [
                 WidgetSpec(type: "jobs"),
                 WidgetSpec(type: "allocation"),
                 WidgetSpec(type: "quota"),
@@ -113,7 +113,7 @@ public struct DemoRunner: CommandRunner {
 
     public func run(_ command: String) async throws -> String {
         try? await Task.sleep(for: .milliseconds(120))
-        if command.contains("@@SQUEUE") { return Fixtures.jobs() }
+        if command.contains("@@SQUEUE") || command.contains("@@SACCT") { return Fixtures.jobs() }
         if command.contains("projects") { return Fixtures.projects() }
         if command.contains("my_quotas") { return Fixtures.quotas }
         if command.contains("sinfo") { return Fixtures.partitions }

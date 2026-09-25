@@ -6,34 +6,59 @@ final class JobsWidget: ClusterWidget {
     let spec: WidgetSpec
     let status = WidgetStatus()
     let clusterName: String
-    let defaultRefresh: Int
-    var snapshot: JobsSnapshot?
+    /// Your jobs in the queue, nil until the first answer.
+    var queue: [SlurmJob]?
+    /// Jobs that ended within finishedHours, newest first.
+    var recent: [SlurmJob] = []
+    @ObservationIgnored private let fixedInterval: Int?
     @ObservationIgnored private let services: Services
-    @ObservationIgnored private var watcher = JobWatcher()
+    @ObservationIgnored private var watcher: FinishWatcher
+    @ObservationIgnored private var listFetched: Date?
+    /// Jobs that left the queue before sacct had their final state, with how many times we've asked.
+    @ObservationIgnored private var awaiting: [String: Int] = [:]
 
     init(spec: WidgetSpec, cluster: ClusterConfig, services: Services) {
         self.spec = spec
         clusterName = cluster.name
-        defaultRefresh = cluster.refreshSeconds ?? 120
+        fixedInterval = spec.refreshSeconds ?? cluster.refreshSeconds
         self.services = services
+        let hours = Int(spec.option("finishedHours") ?? "") ?? 24
+        watcher = FinishWatcher(keep: Double(hours + 24) * 3600)
     }
 
     var finishedHours: Int { Int(spec.option("finishedHours") ?? "") ?? 24 }
+    var backgroundInterval: Int? { JobsSchedule.interval(queueEmpty: (queue ?? []).isEmpty, fixed: fixedInterval) }
+    var staleAfter: Int { 60 }
 
+    /// squeue every time; sacct only when something left the queue or the finished list is old.
     func refresh(_ runner: CommandRunner) async throws {
-        let snap = JobsSnapshot.parse(try await runner.run(JobsSnapshot.command(finishedHours: finishedHours)))
-        for batch in watcher.update(snap) { services.notify(batch, clusterName) }
-        snapshot = snap
+        let before = Set((queue ?? []).map(\.id))
+        let now = JobsSnapshot.parse(try await runner.run(JobsSnapshot.queueCommand)).queue
+        let ids = Set(now.map(\.id))
+        let left = before.subtracting(ids)
+        for id in left where !id.contains("[") { awaiting[id] = awaiting[id] ?? 0 }
+        queue = now
+
+        let age = listFetched.map { Date().timeIntervalSince($0) } ?? .infinity
+        guard JobsSchedule.wantsFinished(somethingLeft: !left.isEmpty, stillWaiting: !awaiting.isEmpty,
+                                         listAge: age, panelOpen: services.activity.panelOpen) else { return }
+
+        let finished = JobsSnapshot.parse(try await runner.run(JobsSnapshot.finishedCommand(hours: finishedHours))).recent
+        listFetched = Date()
+        recent = finished.filter { !ids.contains($0.id) }
+        let found = Set(finished.map(\.id))
+        awaiting = awaiting.filter { !found.contains($0.key) && $0.value < 2 }.mapValues { $0 + 1 }
+        for batch in watcher.update(finished) { services.notify(batch, clusterName) }
     }
 
     var counts: (running: Int, waiting: Int) {
-        guard let q = snapshot?.queue else { return (0, 0) }
+        guard let q = queue else { return (0, 0) }
         return (q.filter(\.isRunning).reduce(0) { $0 + $1.taskCount },
                 q.filter(\.isPending).reduce(0) { $0 + $1.taskCount })
     }
 
     var menuBarText: String? {
-        guard spec.menuBar ?? true, snapshot != nil else { return nil }
+        guard spec.menuBar ?? true, queue != nil else { return nil }
         let c = counts
         if c.running == 0, c.waiting == 0 { return nil }
         return c.waiting > 0 ? "\(c.running)R \(c.waiting)PD" : "\(c.running)R"
@@ -48,21 +73,21 @@ struct JobsView: View {
     var body: some View {
         let c = widget.counts
         Panel(title: widget.spec.title ?? "Jobs",
-              trailing: widget.snapshot == nil ? nil : "\(c.running) running · \(c.waiting) waiting",
+              trailing: widget.queue == nil ? nil : "\(c.running) running · \(c.waiting) waiting",
               status: widget.status) {
-            if let snap = widget.snapshot {
-                let queue = JobGrouping.queue(snap.queue)
-                let done = JobGrouping.finished(snap.recent)
-                if queue.running.isEmpty, queue.waiting.isEmpty {
+            if let queue = widget.queue {
+                let groups = JobGrouping.queue(queue)
+                let done = JobGrouping.finished(widget.recent)
+                if groups.running.isEmpty, groups.waiting.isEmpty {
                     Text("Nothing in the queue.").caption()
                 }
-                ForEach(queue.running.prefix(6)) { RunningRow(group: $0) }
-                if queue.running.count > 6 {
-                    Text("and \(queue.running.count - 6) more running").caption()
+                ForEach(groups.running.prefix(6)) { RunningRow(group: $0) }
+                if groups.running.count > 6 {
+                    Text("and \(groups.running.count - 6) more running").caption()
                 }
-                if !queue.waiting.isEmpty {
+                if !groups.waiting.isEmpty {
                     SubHeading("Waiting")
-                    ForEach(queue.waiting.prefix(4)) { WaitingRow(group: $0) }
+                    ForEach(groups.waiting.prefix(4)) { WaitingRow(group: $0) }
                 }
                 if !done.isEmpty {
                     SubHeading("Finished in the last \(widget.finishedHours)h")

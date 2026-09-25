@@ -2,6 +2,7 @@ import SlurmBarCore
 import SwiftUI
 
 /// How busy a partition is, which says roughly how long a new job will wait.
+/// Counting waiting jobs lists the whole partition queue, so by default this only runs while the panel is open.
 @MainActor @Observable
 final class PartitionWidget: ClusterWidget {
     let spec: WidgetSpec
@@ -10,7 +11,8 @@ final class PartitionWidget: ClusterWidget {
 
     init(spec: WidgetSpec) { self.spec = spec }
 
-    var defaultRefresh: Int { 600 }
+    var backgroundInterval: Int? { configured(nil) }
+    var staleAfter: Int { 600 }
     var names: [String] { (spec.option("partitions") ?? "").split(separator: ",").map(String.init) }
 
     func refresh(_ runner: CommandRunner) async throws {

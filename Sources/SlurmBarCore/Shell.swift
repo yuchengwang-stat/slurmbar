@@ -79,6 +79,7 @@ public struct RemoteShell: CommandRunner {
     }
 
     public func run(_ command: String) async throws -> String {
+        Self.log("\(destination) \(command)")
         let r = try await Subprocess.run("/usr/bin/ssh", arguments + [destination, command], timeout: timeout)
         guard r.status == 0 else {
             let msg = r.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -111,6 +112,18 @@ public struct RemoteShell: CommandRunner {
     public func disconnect() async {
         guard hasControlPath else { return }
         _ = try? await Subprocess.run("/usr/bin/ssh", ["-o", "ControlPath=\(controlPath!)", "-O", "exit", destination], timeout: 5)
+    }
+
+    /// With SLURMBAR_LOG=/some/file, every command sent to a cluster is appended there, for anyone
+    /// who wants to see exactly what SlurmBar runs and how often.
+    static func log(_ line: String) {
+        guard let path = ProcessInfo.processInfo.environment["SLURMBAR_LOG"], !path.isEmpty else { return }
+        let bytes = Array("\(ISO8601DateFormatter().string(from: Date())) \(line)\n".utf8)
+        // O_APPEND keeps lines whole when several panels refresh at the same moment
+        let fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0o644)
+        guard fd >= 0 else { return }
+        _ = bytes.withUnsafeBufferPointer { write(fd, $0.baseAddress, $0.count) }
+        close(fd)
     }
 
     static func quote(_ s: String) -> String {

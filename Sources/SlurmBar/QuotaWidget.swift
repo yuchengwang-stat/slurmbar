@@ -10,7 +10,8 @@ final class QuotaWidget: ClusterWidget {
 
     init(spec: WidgetSpec) { self.spec = spec }
 
-    var defaultRefresh: Int { 1800 }
+    var backgroundInterval: Int? { configured(3600) }
+    var staleAfter: Int { 900 }
 
     func refresh(_ runner: CommandRunner) async throws {
         let command = spec.command ?? Storage.quotaCommand

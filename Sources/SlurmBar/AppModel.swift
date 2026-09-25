@@ -17,7 +17,10 @@ final class AppModel {
     var opensAtLogin = false
     @ObservationIgnored let services: Services
     @ObservationIgnored private var notifier: Notifier?
-    @ObservationIgnored private var wakeObserver: NSObjectProtocol?
+    @ObservationIgnored private var observers: [NSObjectProtocol] = []
+    @ObservationIgnored private var locked = false
+    @ObservationIgnored private var displayAsleep = false
+    @ObservationIgnored private var lastCatchUp = Date.distantPast
 
     init(mode: Mode, autostart: Bool = true) {
         self.mode = mode
@@ -27,13 +30,36 @@ final class AppModel {
         services.notify = { [weak self] batch, cluster in self?.deliver(batch, cluster: cluster) }
         if Bundle.main.bundleIdentifier != nil { opensAtLogin = SMAppService.mainApp.status == .enabled }
         load(start: autostart)
-        if mode == .live {
-            wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
-                forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
-            ) { [weak self] _ in
-                Task { @MainActor in await self?.refreshAll() }
-            }
+        if mode == .live { watchScreen() }
+    }
+
+    /// Pause while the screen is locked or the display sleeps, and catch up once afterwards.
+    /// The catch-up also sends notifications for jobs that ended in the meantime.
+    private func watchScreen() {
+        let workspace = NSWorkspace.shared.notificationCenter
+        let distributed = DistributedNotificationCenter.default()
+        func on(_ center: NotificationCenter, _ name: Notification.Name, _ act: @escaping (AppModel) -> Void) {
+            observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { if let self { act(self) } }
+            })
         }
+        on(distributed, .init("com.apple.screenIsLocked")) { $0.locked = true; $0.updatePause() }
+        on(distributed, .init("com.apple.screenIsUnlocked")) { $0.locked = false; $0.updatePause() }
+        on(workspace, NSWorkspace.screensDidSleepNotification) { $0.displayAsleep = true; $0.updatePause() }
+        on(workspace, NSWorkspace.screensDidWakeNotification) { $0.displayAsleep = false; $0.updatePause() }
+        on(workspace, NSWorkspace.didWakeNotification) { $0.catchUp() }
+    }
+
+    private func updatePause() {
+        let wasPaused = services.activity.paused
+        services.activity.paused = locked || displayAsleep
+        if wasPaused, !services.activity.paused { catchUp() }
+    }
+
+    private func catchUp() {
+        guard !services.activity.paused, Date().timeIntervalSince(lastCatchUp) > 30 else { return }
+        lastCatchUp = Date()
+        Task { for c in clusters { await c.refreshAll(background: true) } }
     }
 
     func load(start: Bool = true) {
@@ -97,7 +123,12 @@ final class AppModel {
 
     func popoverOpened() {
         unseenProblems = 0
-        for c in clusters { c.refreshJobs(ifOlderThan: 60) }
+        services.activity.panelOpen = true
+        for c in clusters { c.refreshStale() }
+    }
+
+    func popoverClosed() {
+        services.activity.panelOpen = false
     }
 
     func saveSetup(host: String, user: String) {

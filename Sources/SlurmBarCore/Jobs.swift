@@ -93,10 +93,21 @@ public struct JobsSnapshot: Sendable {
     static let squeueFormat = "%i|%j|%T|%M|%l|%D|%C|%P|%r|%V|%S"
     static let sacctFormat = "JobID,JobName,State,Elapsed,Timelimit,End,ExitCode,Partition,AllocCPUS"
 
-    /// Everything the jobs panel needs, in one ssh round trip.
+    static var squeuePart: String { "squeue -u \"$USER\" --noheader --format='\(squeueFormat)'" }
+
+    static func sacctPart(_ hours: Int) -> String {
+        "sacct -X --noheader --parsable2 --starttime now-\(max(1, hours))hours --format=\(sacctFormat)"
+    }
+
+    /// Your jobs in the queue. One call to slurmctld.
+    public static var queueCommand: String { "date +%z; echo @@SQUEUE; \(squeuePart)" }
+
+    /// Jobs that ended in the last `hours`. This asks slurmdbd, so the app only runs it when needed.
+    public static func finishedCommand(hours: Int) -> String { "date +%z; echo @@SACCT; \(sacctPart(hours))" }
+
+    /// Both at once, for slurmbar-check.
     public static func command(finishedHours: Int) -> String {
-        "date +%z; echo @@SQUEUE; squeue -u \"$USER\" --noheader --format='\(squeueFormat)'; " +
-        "echo @@SACCT; sacct -X --noheader --parsable2 --starttime now-\(max(1, finishedHours))hours --format=\(sacctFormat)"
+        "date +%z; echo @@SQUEUE; \(squeuePart); echo @@SACCT; \(sacctPart(finishedHours))"
     }
 
     public static func parse(_ output: String) -> JobsSnapshot {
@@ -226,51 +237,39 @@ public struct FinishedBatch: Sendable {
     }
 }
 
-/// Remembers which jobs were running, so it can tell which ones just stopped.
-public struct JobWatcher: Sendable {
-    struct Unresolved: Sendable {
-        var job: SlurmJob
-        var tries: Int
+/// Reports each finished job once. The first list it sees only sets the baseline,
+/// so jobs that ended before SlurmBar started don't produce notifications.
+public struct FinishWatcher: Sendable {
+    private var seen: [String: Date] = [:]
+    private var primed = false
+    private let keep: TimeInterval
+
+    /// `keep` must be longer than the sacct window, or old jobs would be reported again.
+    public init(keep: TimeInterval = 3 * 86_400) { self.keep = keep }
+
+    public mutating func update(_ finished: [SlurmJob], now: Date = Date()) -> [FinishedBatch] {
+        defer { primed = true }
+        let fresh = finished.filter { seen[$0.id] == nil }
+        for j in fresh { seen[j.id] = j.end ?? now }
+        seen = seen.filter { now.timeIntervalSince($0.value) < keep }
+        guard primed else { return [] }
+        // a job cancelled before it ever ran is not news
+        return FinishedBatch.group(fresh.filter { $0.state != "CANCELLED" || ($0.elapsed ?? 0) > 0 })
+    }
+}
+
+/// How often to ask. Slurm's docs ask programs to keep squeue calls to the minimum necessary.
+public enum JobsSchedule {
+    /// Seconds until the next background look at the queue: 5 minutes while you have jobs, 15 when you don't.
+    public static func interval(queueEmpty: Bool, fixed: Int?) -> Int {
+        max(60, fixed ?? (queueEmpty ? 900 : 300))
     }
 
-    private var running: [String: SlurmJob] = [:]
-    private var unresolved: [String: Unresolved] = [:]
-    private var primed = false
-
-    public init() {}
-
-    public mutating func update(_ snap: JobsSnapshot) -> [FinishedBatch] {
-        var now: [String: SlurmJob] = [:]
-        for j in snap.queue where j.isRunning { now[j.id] = j }
-        defer {
-            running = now
-            primed = true
-        }
-        guard primed else { return [] }
-
-        var stopped: [String: Unresolved] = [:]
-        for (id, job) in running where now[id] == nil { stopped[id] = Unresolved(job: job, tries: 0) }
-        for (id, u) in unresolved where now[id] == nil { stopped[id] = u }
-        unresolved = [:]
-
-        var finals: [String: SlurmJob] = [:]
-        for j in snap.recent { finals[j.id] = j }
-        let queued = Set(snap.queue.map(\.id))
-        var done: [SlurmJob] = []
-        for (id, u) in stopped {
-            if let f = finals[id] {
-                done.append(f)
-            } else if queued.contains(id) {
-                continue  // requeued, so it is waiting again
-            } else if u.tries >= 2 {
-                var j = u.job
-                j.state = "ENDED"  // sacct never reported it; say it left the queue
-                done.append(j)
-            } else {
-                unresolved[id] = Unresolved(job: u.job, tries: u.tries + 1)
-            }
-        }
-        return FinishedBatch.group(done)
+    /// sacct is only worth a call the first time (to know which jobs ended before SlurmBar started),
+    /// when something left the queue, when a final state hasn't shown up yet, or when the panel is
+    /// open and the finished list is more than 2 minutes old.
+    public static func wantsFinished(somethingLeft: Bool, stillWaiting: Bool, listAge: TimeInterval, panelOpen: Bool) -> Bool {
+        listAge.isInfinite || somethingLeft || stillWaiting || (panelOpen && listAge > 120)
     }
 }
 

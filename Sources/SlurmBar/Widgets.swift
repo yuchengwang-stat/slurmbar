@@ -17,8 +17,11 @@ final class WidgetStatus {
 protocol ClusterWidget: AnyObject {
     var spec: WidgetSpec { get }
     var status: WidgetStatus { get }
-    /// Seconds between refreshes when the config doesn't say.
-    var defaultRefresh: Int { get }
+    /// Seconds between background refreshes, or nil to refresh only when the panel opens.
+    /// Keep it as long as the panel allows: every refresh is a query on a shared cluster.
+    var backgroundInterval: Int? { get }
+    /// When the panel opens, refresh if the data is older than this many seconds.
+    var staleAfter: Int { get }
     /// False for panels that never talk to the cluster.
     var usesCluster: Bool { get }
     func refresh(_ runner: CommandRunner) async throws
@@ -30,7 +33,11 @@ protocol ClusterWidget: AnyObject {
 extension ClusterWidget {
     var usesCluster: Bool { true }
     var menuBarText: String? { nil }
-    var interval: Int { max(30, spec.refreshSeconds ?? defaultRefresh) }
+
+    /// refreshSeconds in the config wins over a panel's default, but never below a minute.
+    func configured(_ fallback: Int?) -> Int? {
+        spec.refreshSeconds.map { max(60, $0) } ?? fallback
+    }
 }
 
 @MainActor
@@ -47,9 +54,17 @@ enum WidgetFactory {
     }
 }
 
-/// What panels need from the app: a way to notify, and the saved allocation history.
+/// Whether anyone is looking. Polling pauses while the screen is locked or asleep.
+@MainActor @Observable
+final class Activity {
+    var panelOpen = false
+    var paused = false
+}
+
+/// What panels need from the app: a way to notify, the saved allocation history, and the activity state.
 @MainActor
 final class Services {
+    let activity = Activity()
     var notify: (FinishedBatch, String) -> Void = { _, _ in }
     private(set) var history = UsageHistory()
     private let historyURL: URL?
@@ -81,7 +96,8 @@ final class UnknownWidget: ClusterWidget {
 
     init(spec: WidgetSpec) { self.spec = spec }
 
-    var defaultRefresh: Int { 86_400 }
+    var backgroundInterval: Int? { nil }
+    var staleAfter: Int { .max }
     var usesCluster: Bool { false }
     func refresh(_ runner: CommandRunner) async throws {}
 

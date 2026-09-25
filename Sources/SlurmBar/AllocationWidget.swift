@@ -17,7 +17,8 @@ final class AllocationWidget: ClusterWidget {
         self.services = services
     }
 
-    var defaultRefresh: Int { 1800 }
+    var backgroundInterval: Int? { configured(3600) }
+    var staleAfter: Int { 900 }
     var includeStorage: Bool { spec.option("storage") == "true" }
 
     func key(_ p: PSCProject, _ a: PSCAllocation) -> String { "\(clusterName)/\(p.id)/\(a.id)" }

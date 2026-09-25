@@ -13,7 +13,8 @@ final class CommandWidget: ClusterWidget {
 
     init(spec: WidgetSpec) { self.spec = spec }
 
-    var defaultRefresh: Int { 300 }
+    var backgroundInterval: Int? { configured(spec.menuBar == true ? 300 : nil) }
+    var staleAfter: Int { 60 }
     var maxLines: Int { max(1, Int(spec.option("lines") ?? "") ?? 6) }
 
     func refresh(_ runner: CommandRunner) async throws {

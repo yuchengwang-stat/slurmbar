@@ -38,6 +38,7 @@ struct PopoverView: View {
         }
         .frame(width: 380)
         .onAppear { if !renderMode { model.popoverOpened() } }
+        .onDisappear { if !renderMode { model.popoverClosed() } }
     }
 
     var clusters: some View {
