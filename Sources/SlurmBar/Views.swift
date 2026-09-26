@@ -21,6 +21,7 @@ struct MenuBarLabel: View {
 struct PopoverView: View {
     let model: AppModel
     var renderMode = false
+    var inWindow = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -35,6 +36,13 @@ struct PopoverView: View {
             }
             Divider()
             Footer(model: model)
+            if inWindow {
+                Text("This is the same panel as SlurmBar's menu bar icon, a small server rack at the top right. If a notch hides the icon, open SlurmBar again and this window comes back.")
+                    .caption()
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 10)
+            }
         }
         .frame(width: 380)
         .onAppear { if !renderMode { model.popoverOpened() } }

@@ -30,7 +30,7 @@ scripts/build-app.sh
 cp -R build/SlurmBar.app /Applications/
 ```
 
-Open it and a server icon appears in the menu bar. The first time, it asks for your login host and username. The build is signed ad hoc and not notarized, which is fine for an app you built yourself.
+Open it and a server icon appears in the menu bar. The first time, a window asks for your login host and username. On a MacBook with a notch and a full menu bar, the icon can end up hidden behind the notch; opening SlurmBar again (from Finder or Spotlight) always brings up the same panel in a window. The build is signed ad hoc and not notarized, which is fine for an app you built yourself.
 
 ## Connecting
 

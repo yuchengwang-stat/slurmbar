@@ -7,6 +7,9 @@ import SwiftUI
 final class AppModel {
     enum Mode { case live, demo }
 
+    /// The model of the running app, for the window that shows the same panel.
+    static weak var current: AppModel?
+
     let mode: Mode
     let configURL: URL
     var clusters: [ClusterModel] = []
@@ -30,6 +33,7 @@ final class AppModel {
         services.notify = { [weak self] batch, cluster in self?.deliver(batch, cluster: cluster) }
         if Bundle.main.bundleIdentifier != nil { opensAtLogin = SMAppService.mainApp.status == .enabled }
         load(start: autostart)
+        if autostart { AppModel.current = self }
         if mode == .live { watchScreen() }
     }
 

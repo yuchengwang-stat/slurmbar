@@ -27,6 +27,7 @@ enum Launch {
 }
 
 struct SlurmBarApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var model = AppModel(mode: Launch.demo ? .demo : .live)
 
     var body: some Scene {
