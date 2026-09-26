@@ -30,7 +30,7 @@ scripts/build-app.sh
 cp -R build/SlurmBar.app /Applications/
 ```
 
-Open it and a server icon appears in the menu bar. The first time, a window asks for your login host and username. On a MacBook with a notch and a full menu bar, the icon can end up hidden behind the notch; opening SlurmBar again (from Finder or Spotlight) always brings up the same panel in a window. The build is signed ad hoc and not notarized, which is fine for an app you built yourself.
+Open it and a server icon appears in the menu bar, and SlurmBar's icon appears in the Dock. The first time, a window asks for your login host and username. Clicking the Dock icon, or opening SlurmBar again from Finder or Spotlight, brings up the same panel in a window, which helps on a MacBook where a full menu bar pushes the icon behind the notch. Show in Dock in the gear menu turns the Dock icon off. The build is signed ad hoc and not notarized, which is fine for an app you built yourself.
 
 ## Connecting
 
@@ -66,7 +66,7 @@ A day with jobs in the queue and the screen on for 10 hours comes to about 120 `
 
 The config is `~/.config/slurmbar/config.json`, or the file `SLURMBAR_CONFIG` points to. Open config in the panel opens it, and Reload applies your changes. [`examples/bridges2.json`](examples/bridges2.json) is a full example.
 
-At the top level, `autoRefresh` (default `false`) switches on background refresh, and `notifications` (default `true`) only matters when it's on.
+At the top level, `autoRefresh` (default `false`) switches on background refresh, `notifications` (default `true`) only matters when it's on, and `showInDock` (default `true`) controls the Dock icon.
 
 ```json
 {

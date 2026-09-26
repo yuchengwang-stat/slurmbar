@@ -5,11 +5,14 @@ public struct AppConfig: Codable, Sendable {
     public var autoRefresh: Bool?
     /// Job notifications. They need automatic refresh, since nothing else would notice a job ending.
     public var notifications: Bool?
+    /// A Dock icon that opens the panel in a window. On by default, since the menu bar icon can hide behind a notch.
+    public var showInDock: Bool?
     public var clusters: [ClusterConfig]
 
-    public init(autoRefresh: Bool? = false, notifications: Bool? = true, clusters: [ClusterConfig]) {
+    public init(autoRefresh: Bool? = false, notifications: Bool? = true, showInDock: Bool? = nil, clusters: [ClusterConfig]) {
         self.autoRefresh = autoRefresh
         self.notifications = notifications
+        self.showInDock = showInDock
         self.clusters = clusters
     }
 }

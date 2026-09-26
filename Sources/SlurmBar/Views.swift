@@ -227,6 +227,7 @@ struct Footer: View {
             Spacer()
             Menu {
                 Toggle("Refresh automatically", isOn: Binding(get: { model.autoRefresh }, set: { model.setAutoRefresh($0) }))
+                Toggle("Show in Dock", isOn: Binding(get: { model.showInDock }, set: { model.setShowInDock($0) }))
                 Toggle("Open at login", isOn: Binding(get: { model.opensAtLogin }, set: { model.setOpensAtLogin($0) }))
                 if model.autoRefresh {
                     Button("Send a test notification") { model.sendTestNotification() }

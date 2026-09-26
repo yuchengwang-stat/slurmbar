@@ -19,6 +19,7 @@ final class AppModel {
     var notificationsOn = true
     /// Off by default: nothing reaches the cluster until you press Refresh.
     var autoRefresh = false
+    var showInDock = true
     var opensAtLogin = false
     @ObservationIgnored let services: Services
     @ObservationIgnored private var notifier: Notifier?
@@ -87,6 +88,8 @@ final class AppModel {
             }
         }
         autoRefresh = config.autoRefresh ?? false
+        showInDock = config.showInDock ?? true
+        applyDockIcon()
         notificationsOn = config.notifications ?? true
         if mode == .live, autoRefresh, notificationsOn, notifier == nil, Bundle.main.bundleIdentifier != nil {
             notifier = Notifier()
@@ -168,6 +171,23 @@ final class AppModel {
         p.executableURL = URL(fileURLWithPath: "/usr/bin/open")
         p.arguments = ["-t", configURL.path]
         try? p.run()
+    }
+
+    /// A Dock icon makes SlurmBar an ordinary app: clicking it opens the panel in a window.
+    func applyDockIcon() {
+        guard AppModel.current === self, NSApp != nil else { return }
+        NSApp.setActivationPolicy(showInDock ? .regular : .accessory)
+    }
+
+    func setShowInDock(_ on: Bool) {
+        guard mode == .live else { return }
+        do {
+            try ConfigStore.set("showInDock", to: on, in: configURL)
+            showInDock = on
+            applyDockIcon()
+        } catch {
+            configError = "Couldn't update \(configURL.path): \(error.localizedDescription)"
+        }
     }
 
     func setAutoRefresh(_ on: Bool) {

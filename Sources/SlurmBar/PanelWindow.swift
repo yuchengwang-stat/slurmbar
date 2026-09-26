@@ -29,6 +29,7 @@ final class PanelWindow {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        AppModel.current?.applyDockIcon()
         // first run: a small icon in a crowded menu bar is easy to miss, so start with a window
         DispatchQueue.main.async {
             MainActor.assumeIsolated {
