@@ -1,10 +1,14 @@
 import Foundation
 
 public struct AppConfig: Codable, Sendable {
+    /// Off by default: SlurmBar only asks the cluster when you press Refresh.
+    public var autoRefresh: Bool?
+    /// Job notifications. They need automatic refresh, since nothing else would notice a job ending.
     public var notifications: Bool?
     public var clusters: [ClusterConfig]
 
-    public init(notifications: Bool? = true, clusters: [ClusterConfig]) {
+    public init(autoRefresh: Bool? = false, notifications: Bool? = true, clusters: [ClusterConfig]) {
+        self.autoRefresh = autoRefresh
         self.notifications = notifications
         self.clusters = clusters
     }
@@ -90,9 +94,17 @@ public enum ConfigStore {
         try e.encode(config).write(to: url, options: .atomic)
     }
 
+    /// Changes one top-level setting and leaves everything else in the file alone.
+    public static func set(_ key: String, to value: Bool, in url: URL) throws {
+        var object = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any] ?? [:]
+        object[key] = value
+        let data = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
+        try data.write(to: url, options: .atomic)
+    }
+
     public static func starter(host: String = "YOUR_LOGIN_HOST", user: String = "YOUR_USERNAME") -> AppConfig {
         let name = host.split(separator: ".").first.map(String.init) ?? "cluster"
-        return AppConfig(notifications: true, clusters: [
+        return AppConfig(autoRefresh: false, notifications: true, clusters: [
             ClusterConfig(name: name, host: host, user: user, controlPath: "~/.ssh/slurmbar-%r@%h",
                           controlPersist: "12h", widgets: ClusterConfig.defaultWidgets(psc: host.hasSuffix("psc.edu"))),
         ])

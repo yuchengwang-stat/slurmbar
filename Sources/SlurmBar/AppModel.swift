@@ -17,6 +17,8 @@ final class AppModel {
     var needsSetup = false
     var unseenProblems = 0
     var notificationsOn = true
+    /// Off by default: nothing reaches the cluster until you press Refresh.
+    var autoRefresh = false
     var opensAtLogin = false
     @ObservationIgnored let services: Services
     @ObservationIgnored private var notifier: Notifier?
@@ -61,7 +63,7 @@ final class AppModel {
     }
 
     private func catchUp() {
-        guard !services.activity.paused, Date().timeIntervalSince(lastCatchUp) > 30 else { return }
+        guard autoRefresh, !services.activity.paused, Date().timeIntervalSince(lastCatchUp) > 30 else { return }
         lastCatchUp = Date()
         Task { for c in clusters { await c.refreshAll(background: true) } }
     }
@@ -84,19 +86,26 @@ final class AppModel {
                 return
             }
         }
+        autoRefresh = config.autoRefresh ?? false
         notificationsOn = config.notifications ?? true
-        if mode == .live, notificationsOn, notifier == nil, Bundle.main.bundleIdentifier != nil {
+        if mode == .live, autoRefresh, notificationsOn, notifier == nil, Bundle.main.bundleIdentifier != nil {
             notifier = Notifier()
         }
         needsSetup = config.clusters.isEmpty || config.clusters.contains(where: \.needsSetup)
         guard !needsSetup else { return }
         clusters = config.clusters.map { c in
-            ClusterModel(config: c, runner: mode == .demo ? DemoRunner() : RemoteShell(cluster: c), services: services)
+            ClusterModel(config: c, runner: mode == .demo ? DemoRunner() : RemoteShell(cluster: c), services: services,
+                         auto: autoRefresh)
         }
         if mode == .demo {
             for c in clusters { services.seed("\(c.config.name)/abc123p/B2-REGULAR", Fixtures.history()) }
         }
-        if start { clusters.forEach { $0.start() } }
+        guard start else { return }
+        if autoRefresh {
+            clusters.forEach { $0.start() }
+        } else {
+            for c in clusters { Task { await c.checkConnection() } }
+        }
     }
 
     func refreshAll() async {
@@ -106,6 +115,7 @@ final class AppModel {
     var menuBarText: String {
         if needsSetup { return "set up" }
         if configError != nil { return "config?" }
+        guard autoRefresh else { return "" }  // with manual refresh, counts would go stale up there
         var parts: [String] = []
         for c in clusters {
             if c.connected == false {
@@ -128,7 +138,13 @@ final class AppModel {
     func popoverOpened() {
         unseenProblems = 0
         services.activity.panelOpen = true
-        for c in clusters { c.refreshStale() }
+        for c in clusters {
+            if autoRefresh {
+                c.refreshStale()
+            } else {
+                Task { await c.checkConnection() }  // only asks the local ssh socket, not the cluster
+            }
+        }
     }
 
     func popoverClosed() {
@@ -152,6 +168,16 @@ final class AppModel {
         p.executableURL = URL(fileURLWithPath: "/usr/bin/open")
         p.arguments = ["-t", configURL.path]
         try? p.run()
+    }
+
+    func setAutoRefresh(_ on: Bool) {
+        guard mode == .live else { return }
+        do {
+            try ConfigStore.set("autoRefresh", to: on, in: configURL)
+            load()
+        } catch {
+            configError = "Couldn't update \(configURL.path): \(error.localizedDescription)"
+        }
     }
 
     func setOpensAtLogin(_ on: Bool) {

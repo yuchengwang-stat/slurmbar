@@ -95,7 +95,7 @@ public enum Fixtures {
     """
 
     public static var demoConfig: AppConfig {
-        AppConfig(notifications: false, clusters: [
+        AppConfig(autoRefresh: true, notifications: false, clusters: [
             ClusterConfig(name: "bridges2", host: "bridges2.psc.edu", user: "demo", widgets: [
                 WidgetSpec(type: "jobs"),
                 WidgetSpec(type: "allocation"),

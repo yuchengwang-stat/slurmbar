@@ -125,6 +125,18 @@ check("refused login is told apart from a network problem",
       ShellError.failed(status: 255, message: "ywang@x: Permission denied (publickey).").isLoginRefused
       && !ShellError.failed(status: 255, message: "Connection closed by UNKNOWN port 65535").isLoginRefused)
 
+// manual refresh is the default
+check("new configs start with manual refresh", starter.autoRefresh == false)
+let bare = try? JSONDecoder().decode(AppConfig.self, from: Data(#"{"clusters": []}"#.utf8))
+check("a config without autoRefresh means manual", bare != nil && bare?.autoRefresh == nil)
+let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("slurmbar-check-\(UUID().uuidString).json")
+try? ConfigStore.save(starter, to: scratch)
+try? ConfigStore.set("autoRefresh", to: true, in: scratch)
+let flipped = try? ConfigStore.load(scratch)
+check("the auto refresh switch changes only that setting",
+      flipped?.autoRefresh == true && flipped?.clusters.first?.user == "me" && flipped?.clusters.first?.widgets?.count == 4)
+try? FileManager.default.removeItem(at: scratch)
+
 let example = URL(fileURLWithPath: "examples/bridges2.json")
 if FileManager.default.fileExists(atPath: example.path) {
     let widgets = (try? ConfigStore.load(example))?.clusters.first?.widgets?.map(\.type) ?? []

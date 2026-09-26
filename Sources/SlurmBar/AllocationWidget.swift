@@ -54,9 +54,7 @@ struct AllocationView: View {
 
     var body: some View {
         Panel(title: widget.spec.title ?? "Allocation", trailing: widget.projects.first?.id, status: widget.status) {
-            if widget.projects.isEmpty, widget.status.error == nil {
-                Text("Loading…").caption()
-            }
+            if widget.projects.isEmpty { Placeholder(status: widget.status) }
             ForEach(widget.projects) { p in
                 ForEach(p.allocations.filter { widget.includeStorage || !$0.isStorage }) { a in
                     AllocationRow(allocation: a, perDay: widget.rates[widget.key(p, a)],

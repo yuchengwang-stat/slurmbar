@@ -11,9 +11,9 @@ It works with any Slurm cluster you can reach over ssh. On PSC's Bridges-2 it al
 
 ## What it shows
 
-- Menu bar: running and waiting job counts, like `4R 16PD`, plus `✗1` when a job failed since you last looked.
+- Menu bar (with automatic refresh on): running and waiting job counts, like `4R 16PD`, plus `✗1` when a job failed since you last looked.
 - Jobs: running jobs with time used against the time limit (orange past 75%, red past 90%), waiting jobs with the reason and Slurm's start estimate, and jobs that finished in the last 24 hours. Array tasks fold into one row.
-- Notifications when a job finishes, fails, runs out of memory or hits its time limit. A finished array sends a single notification for all its tasks.
+- Notifications (with automatic refresh on) when a job finishes, fails, runs out of memory or hits its time limit. A finished array sends a single notification for all its tasks.
 - Allocation (PSC): SU left, the end date, and how fast the balance went down this week. If it would run out before the end date at that pace, the panel says when.
 - Storage (PSC): home and project quotas, with file counts.
 - Partitions: how busy a partition is and how many jobs are waiting for it.
@@ -48,9 +48,11 @@ With a `controlPath`, SlurmBar can only join that connection. If it's gone, ssh 
 
 If you log in with a key and no 2FA, leave `controlPath` out and SlurmBar connects directly. If such a login is ever refused, it stops trying until you press refresh.
 
-### How often it asks
+## Refreshing
 
-Slurm's own [squeue documentation](https://slurm.schedmd.com/squeue.html) asks programs to keep calls to the minimum necessary, since every call lands on the scheduler everyone shares. So SlurmBar asks as little as it can:
+By default SlurmBar never asks the cluster on its own. Open the panel and press Refresh. If your ssh connection is still open, it refreshes right away. If it isn't, the button reads Log in & refresh: it opens Terminal so you can sign in, and refreshes once you're in. Opening the panel only checks the local ssh socket, which doesn't reach the cluster.
+
+Turn on Refresh automatically in the gear menu (or set `"autoRefresh": true`) to get the menu bar counts and job notifications. SlurmBar then asks as little as it can, since Slurm's own [squeue documentation](https://slurm.schedmd.com/squeue.html) asks programs to keep calls to the minimum necessary:
 
 - `squeue` for your jobs: every 5 minutes while you have jobs in the queue, every 15 minutes when you don't.
 - `sacct`: only when a job leaves the queue, to learn how it ended, or when you open the panel and the list is more than 2 minutes old.
@@ -64,9 +66,11 @@ A day with jobs in the queue and the screen on for 10 hours comes to about 120 `
 
 The config is `~/.config/slurmbar/config.json`, or the file `SLURMBAR_CONFIG` points to. Open config in the panel opens it, and Reload applies your changes. [`examples/bridges2.json`](examples/bridges2.json) is a full example.
 
+At the top level, `autoRefresh` (default `false`) switches on background refresh, and `notifications` (default `true`) only matters when it's on.
+
 ```json
 {
-  "notifications": true,
+  "autoRefresh": false,
   "clusters": [
     {
       "name": "bridges2",

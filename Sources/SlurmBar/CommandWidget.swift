@@ -40,8 +40,10 @@ struct CommandView: View {
     var body: some View {
         Panel(title: widget.spec.title ?? "Command", status: widget.status) {
             if widget.lines.isEmpty {
-                if widget.status.error == nil {
-                    Text(widget.status.lastUpdated == nil ? "Loading…" : "No output.").caption()
+                if widget.status.lastUpdated == nil {
+                    Placeholder(status: widget.status)
+                } else if widget.status.error == nil {
+                    Text("No output.").caption()
                 }
             } else {
                 Text(widget.lines.joined(separator: "\n") + (widget.truncated ? "\n…" : ""))

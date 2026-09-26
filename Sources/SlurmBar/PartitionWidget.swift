@@ -27,9 +27,7 @@ struct PartitionView: View {
 
     var body: some View {
         Panel(title: widget.spec.title ?? "Partitions", status: widget.status) {
-            if widget.loads.isEmpty, widget.status.error == nil {
-                Text("Loading…").caption()
-            }
+            if widget.loads.isEmpty { Placeholder(status: widget.status) }
             ForEach(widget.loads.prefix(6)) { p in
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(alignment: .firstTextBaseline) {

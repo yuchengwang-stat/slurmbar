@@ -7,6 +7,8 @@ final class ClusterModel: Identifiable {
     let config: ClusterConfig
     let runner: CommandRunner
     let widgets: [any ClusterWidget]
+    /// Whether this cluster refreshes on its own. When false, only the Refresh button asks the cluster.
+    let auto: Bool
     var connected: Bool?
     var lastSuccess: Date?
     var refreshing = false
@@ -19,9 +21,10 @@ final class ClusterModel: Identifiable {
 
     nonisolated var id: String { config.name }
 
-    init(config: ClusterConfig, runner: CommandRunner, services: Services) {
+    init(config: ClusterConfig, runner: CommandRunner, services: Services, auto: Bool = true) {
         self.config = config
         self.runner = runner
+        self.auto = auto
         activity = services.activity
         widgets = (config.widgets ?? ClusterConfig.defaultWidgets(psc: config.host.hasSuffix("psc.edu")))
             .map { WidgetFactory.make($0, cluster: config, services: services) }
@@ -82,6 +85,23 @@ final class ClusterModel: Identifiable {
                 group.addTask { await self.refresh(w) }
             }
         }
+    }
+
+    /// The Refresh button. If the ssh connection is up, refresh now; if it's gone, open Terminal to log in
+    /// first, and waitForConnection refreshes once the login goes through.
+    func refreshNow() async {
+        if canConnect, await runner.isConnected() == false {
+            connected = false
+            openConnectInTerminal()
+            return
+        }
+        await refreshAll()
+    }
+
+    /// Asks only the local ssh control socket whether the connection is up. Nothing reaches the cluster.
+    func checkConnection() async {
+        guard canConnect else { return }
+        connected = await runner.isConnected()
     }
 
     /// When the panel opens, refresh whatever is out of date.

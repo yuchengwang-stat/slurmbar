@@ -94,6 +94,10 @@ struct ClusterHeader: View {
             }
             if isSnapshot {
                 Image(systemName: "arrow.clockwise").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+            } else if !cluster.auto {
+                Button(refreshLabel) { Task { await cluster.refreshNow() } }
+                    .controlSize(.small)
+                    .disabled(cluster.refreshing)
             } else {
                 Button {
                     Task { await cluster.refreshAll() }
@@ -108,6 +112,11 @@ struct ClusterHeader: View {
         .padding(.horizontal, 14)
         .padding(.top, 12)
         .padding(.bottom, 9)
+    }
+
+    var refreshLabel: String {
+        if cluster.refreshing { return "Refreshing…" }
+        return cluster.connected == false && cluster.canConnect ? "Log in & refresh" : "Refresh"
     }
 
     var dot: Color {
@@ -217,8 +226,11 @@ struct Footer: View {
             Button("Reload") { model.load() }
             Spacer()
             Menu {
+                Toggle("Refresh automatically", isOn: Binding(get: { model.autoRefresh }, set: { model.setAutoRefresh($0) }))
                 Toggle("Open at login", isOn: Binding(get: { model.opensAtLogin }, set: { model.setOpensAtLogin($0) }))
-                Button("Send a test notification") { model.sendTestNotification() }
+                if model.autoRefresh {
+                    Button("Send a test notification") { model.sendTestNotification() }
+                }
                 Divider()
                 Button("SlurmBar on GitHub") {
                     NSWorkspace.shared.open(URL(string: "https://github.com/yuchengwang-stat/slurmbar")!)
@@ -267,6 +279,17 @@ struct Panel<Content: View>: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+    }
+}
+
+/// What a panel shows before it has any data.
+struct Placeholder: View {
+    let status: WidgetStatus
+
+    var body: some View {
+        if status.error == nil {
+            Text(status.loading ? "Loading…" : "Not loaded yet. Press Refresh.").caption()
+        }
     }
 }
 

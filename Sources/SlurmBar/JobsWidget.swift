@@ -93,8 +93,8 @@ struct JobsView: View {
                     SubHeading("Finished in the last \(widget.finishedHours)h")
                     ForEach(done.prefix(5)) { FinishedRow(group: $0) }
                 }
-            } else if widget.status.error == nil {
-                Text("Loading…").caption()
+            } else {
+                Placeholder(status: widget.status)
             }
         }
     }

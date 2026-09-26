@@ -28,9 +28,7 @@ struct QuotaView: View {
 
     var body: some View {
         Panel(title: widget.spec.title ?? "Storage", status: widget.status) {
-            if widget.quotas.isEmpty, widget.status.error == nil {
-                Text("Loading…").caption()
-            }
+            if widget.quotas.isEmpty { Placeholder(status: widget.status) }
             ForEach(widget.quotas) { QuotaRow(quota: $0) }
         }
     }
